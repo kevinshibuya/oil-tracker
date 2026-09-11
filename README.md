@@ -26,6 +26,30 @@ uv run oil --help
 uv run oil db migrate
 ```
 
+## Run order
+
+From `pipeline/`, against a running database:
+
+```sh
+uv run oil db migrate
+uv run oil ais probe          # committed as config/ais_sources.yaml
+uv run oil ais backfill --port corpus_christi --from 2023-01-01 --to 2025-09-30 --workers 2
+uv run oil port seed          # committed as the version-0 features in the terminals geojson
+uv run oil port load
+uv run oil ais load --port corpus_christi --from 2023-01-01 --to 2025-09-30
+uv run oil vessels build
+uv run oil port derive --port corpus_christi
+uv run oil events detect --port corpus_christi
+uv run oil truth portwatch --port corpus_christi
+uv run oil report m1 --port corpus_christi --check
+```
+
+`ais probe` and `port seed` write files that are committed, so a fresh clone can
+skip both: `config/ais_sources.yaml` already names the working archive per year,
+and `config/ports/corpus_christi.terminals.geojson` already holds the version-0
+seed circles. The backfill is the long step, about five hours for the 1,004-day
+span; it is resumable, so an interrupted run picks up where it stopped.
+
 ## Checks
 
 From `pipeline/`:

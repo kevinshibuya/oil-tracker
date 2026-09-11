@@ -26,7 +26,9 @@ from oiltracker.ports.config import (
     terminals_path,
     write_terminals_geojson,
 )
+from oiltracker.ports.derive import derive_terminals
 from oiltracker.ports.store import upsert_terminals
+from oiltracker.report.m1 import m1_check, m1_rows, render
 from oiltracker.settings import Settings
 from oiltracker.truth.portwatch import confirm_portid, fetch_portwatch, upsert_portwatch
 from oiltracker.version import code_version
@@ -278,3 +280,58 @@ def truth_portwatch(
         conn.commit()
     span = f"{rows[0].date} to {rows[-1].date}" if rows else "nothing"
     typer.echo(f"upserted {written} PortWatch days, {span}")
+
+
+@port_app.command("derive")
+def port_derive(
+    port: PortOption = DEFAULT_PORT,
+    version: Annotated[int, typer.Option("--version", help="Polygon version to write.")] = 1,
+) -> None:
+    """Derive terminal polygons from the low-speed tanker positions around each seed."""
+    cfg = load_port(port)
+    path = terminals_path(cfg)
+
+    with connect(Settings()) as conn:
+        derived = derive_terminals(conn, cfg, version)
+
+        kept = [t for t in read_terminals_geojson(path) if t.version != version]
+        everything = [*kept, *[one.terminal for one in derived]]
+
+        problems = check_port(cfg, everything)
+        if problems:
+            for problem in problems:
+                typer.echo(problem)
+            typer.echo(f"blocked: check_port {problems}")
+            raise typer.Exit(code=1)
+
+        write_terminals_geojson(path, everything)
+        _ = upsert_terminals(conn, cfg, [one.terminal for one in derived])
+        conn.commit()
+
+    for one in derived:
+        typer.echo(
+            f"{one.terminal.terminal_id}: {one.points} points, "
+            f"{one.area_m2:,.0f} m2, fallback={one.fallback}"
+        )
+
+
+@report_app.command("m1")
+def report_m1(
+    port: PortOption = DEFAULT_PORT,
+    check: Annotated[
+        bool, typer.Option("--check", help="Exit 1 if any month looks wrong.")
+    ] = False,
+) -> None:
+    """The milestone 1 acceptance report: export events per month against PortWatch."""
+    cfg = load_port(port)
+    with connect(Settings()) as conn:
+        rows = m1_rows(conn, cfg)
+    typer.echo(render(rows))
+
+    problems = m1_check(rows)
+    if problems:
+        typer.echo("")
+        for problem in problems:
+            typer.echo(problem)
+    if check and problems:
+        raise typer.Exit(code=1)
