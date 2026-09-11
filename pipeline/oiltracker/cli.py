@@ -1,16 +1,19 @@
 """The `oil` command line: one Typer sub-app per stage of the pipeline."""
 
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
 import httpx
 import typer
 
+from oiltracker.ais.backfill import backfill, backfill_day, parquet_path
+from oiltracker.ais.fixture import make_fixture
 from oiltracker.ais.probe import probe_year
-from oiltracker.ais.sources import CANDIDATES, SourceSpec, write_sources
+from oiltracker.ais.sources import CANDIDATES, SourceSpec, load_sources, write_sources
 from oiltracker.db.connect import connect
 from oiltracker.db.migrate import migrate
-from oiltracker.paths import AIS_SOURCES
+from oiltracker.paths import AIS_SOURCES, DATA_DIR, FIXTURES_DIR
 from oiltracker.ports.check import check_port
 from oiltracker.ports.config import (
     Terminal,
@@ -26,6 +29,9 @@ from oiltracker.settings import Settings
 MIGRATIONS_DIR = Path(__file__).parent / "db" / "migrations"
 DEFAULT_YEARS = [2023, 2024, 2025]
 DEFAULT_PORT = "corpus_christi"
+SPAN_START = "2023-01-01"
+SPAN_END = "2025-09-30"
+FIXTURE_MAX_BYTES = 4 * 1024 * 1024
 PROBE_TIMEOUT_S = 60.0
 
 app = typer.Typer(no_args_is_help=True, help="Crude oil export tracking for Corpus Christi.")
@@ -133,3 +139,58 @@ def port_check(port: PortOption = DEFAULT_PORT) -> None:
     if problems:
         raise typer.Exit(code=1)
     typer.echo("ok")
+
+
+FromOption = Annotated[str, typer.Option("--from", help="First day, ISO format.")]
+ToOption = Annotated[str, typer.Option("--to", help="Last day, inclusive, ISO format.")]
+
+
+@ais_app.command("backfill")
+def ais_backfill(
+    port: PortOption = DEFAULT_PORT,
+    from_day: FromOption = SPAN_START,
+    to_day: ToOption = SPAN_END,
+    workers: Annotated[int, typer.Option("--workers", help="Days fetched at once.")] = 2,
+    data_dir: Annotated[Path, typer.Option("--data-dir")] = DATA_DIR,
+) -> None:
+    """Fetch every day in the span that the manifest does not already account for."""
+    cfg = load_port(port)
+    counts = backfill(
+        Settings(),
+        cfg,
+        load_sources(AIS_SOURCES),
+        date.fromisoformat(from_day),
+        date.fromisoformat(to_day),
+        data_dir,
+        workers,
+    )
+    if not counts:
+        typer.echo("nothing to do: every day in the span is already accounted for")
+        return
+    for status, count in sorted(counts.items()):
+        typer.echo(f"{status}: {count}")
+    if counts.get("failed"):
+        raise typer.Exit(code=1)
+
+
+@ais_app.command("fixture")
+def ais_fixture(
+    port: PortOption = DEFAULT_PORT,
+    day: Annotated[str, typer.Option("--day", help="The day to cut down.")] = "2024-03-05",
+    data_dir: Annotated[Path, typer.Option("--data-dir")] = DATA_DIR,
+) -> None:
+    """Cut one real day down to a parquet small enough to commit."""
+    cfg = load_port(port)
+    when = date.fromisoformat(day)
+    source = parquet_path(data_dir, cfg.id, when)
+
+    if not source.exists():
+        with connect(Settings()) as conn:
+            row = backfill_day(conn, cfg, load_sources(AIS_SOURCES)[when.year], when, data_dir)
+        if row.status != "done":
+            typer.echo(f"blocked: {day} is {row.status}, not done")
+            raise typer.Exit(code=1)
+
+    out = FIXTURES_DIR / "ais" / cfg.id / f"{when.isoformat()}.parquet"
+    rows = make_fixture(source, out, FIXTURE_MAX_BYTES)
+    typer.echo(f"{out} holds {rows} rows in {out.stat().st_size} bytes")
