@@ -1,0 +1,59 @@
+[project]
+name = "oiltracker"
+version = "0.1.0"
+description = "Crude oil export tracking from AIS for the Port of Corpus Christi"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "psycopg[binary]>=3.2",
+    "shapely>=2.0",
+    "httpx>=0.27",
+    "zstandard>=0.22",
+    "stream-unzip>=0.0.90",
+    "pyyaml>=6.0",
+    "pyarrow>=16.0",
+]
+
+[project.scripts]
+oil = "oiltracker.cli:app"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "pyright>=1.1.380",
+    "pytest>=8.2",
+    "pyarrow-stubs>=17.0",
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["oiltracker"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ANN"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN201"]
+
+[tool.pyright]
+include = ["oiltracker", "tests"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+reportMissingTypeStubs = "error"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

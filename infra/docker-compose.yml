@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: oil-db
+    environment:
+      POSTGRES_USER: oil
+      POSTGRES_PASSWORD: oil
+      POSTGRES_DB: oil
+    ports:
+      # Host 5434, not the 5433 the plan named: that port is taken on this machine.
+      - "5434:5432"
+    volumes:
+      - oil_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oil -d oil"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  oil_pgdata:
