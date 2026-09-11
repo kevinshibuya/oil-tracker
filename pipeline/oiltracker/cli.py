@@ -15,6 +15,7 @@ from oiltracker.ais.probe import probe_year
 from oiltracker.ais.sources import CANDIDATES, SourceSpec, load_sources, write_sources
 from oiltracker.db.connect import connect
 from oiltracker.db.migrate import migrate
+from oiltracker.events.run import detect_port
 from oiltracker.paths import AIS_SOURCES, DATA_DIR, FIXTURES_DIR, VESSELS_DIR
 from oiltracker.ports.check import check_port
 from oiltracker.ports.config import (
@@ -237,3 +238,13 @@ def vessels_build(
         written = build_vessels(conn, particulars, code_version(), cfg.id)
         conn.commit()
     typer.echo(f"wrote {written} vessels")
+
+
+@events_app.command("detect")
+def events_detect(port: PortOption = DEFAULT_PORT) -> None:
+    """Rebuild berth visits and export events from the loaded positions."""
+    cfg = load_port(port)
+    with connect(Settings()) as conn:
+        visits, events = detect_port(conn, cfg, code_version())
+        conn.commit()
+    typer.echo(f"{visits} berth visits, {events} export events")
