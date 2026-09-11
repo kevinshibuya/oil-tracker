@@ -10,12 +10,22 @@ from oiltracker.ais.probe import probe_year
 from oiltracker.ais.sources import CANDIDATES, SourceSpec, write_sources
 from oiltracker.db.connect import connect
 from oiltracker.db.migrate import migrate
+from oiltracker.paths import AIS_SOURCES
+from oiltracker.ports.check import check_port
+from oiltracker.ports.config import (
+    Terminal,
+    load_port,
+    read_terminals_geojson,
+    seed_circle,
+    terminals_path,
+    write_terminals_geojson,
+)
+from oiltracker.ports.store import upsert_terminals
 from oiltracker.settings import Settings
 
 MIGRATIONS_DIR = Path(__file__).parent / "db" / "migrations"
-REPO_ROOT = Path(__file__).resolve().parents[2]
-AIS_SOURCES = REPO_ROOT / "config" / "ais_sources.yaml"
 DEFAULT_YEARS = [2023, 2024, 2025]
+DEFAULT_PORT = "corpus_christi"
 PROBE_TIMEOUT_S = 60.0
 
 app = typer.Typer(no_args_is_help=True, help="Crude oil export tracking for Corpus Christi.")
@@ -76,3 +86,50 @@ def ais_probe(
     out.parent.mkdir(parents=True, exist_ok=True)
     write_sources(out, sources)
     typer.echo(f"wrote {out}")
+
+
+PortOption = Annotated[str, typer.Option("--port", help="Port id in config/ports.")]
+
+
+@port_app.command("seed")
+def port_seed(port: PortOption = DEFAULT_PORT) -> None:
+    """Write the version-0 seed circles into the port's geojson of record."""
+    cfg = load_port(port)
+    path = terminals_path(cfg)
+    kept = [t for t in read_terminals_geojson(path) if t.version != 0] if path.exists() else []
+    seeded = [
+        Terminal(
+            terminal_id=seed.terminal_id,
+            name=seed.name,
+            crude=seed.crude,
+            version=0,
+            geom=seed_circle(seed.centre[0], seed.centre[1], cfg.seed_radius_m),
+        )
+        for seed in cfg.terminal_seeds
+    ]
+    write_terminals_geojson(path, kept + seeded)
+    typer.echo(f"wrote {len(seeded)} version-0 features to {path} ({len(kept)} kept)")
+
+
+@port_app.command("load")
+def port_load(port: PortOption = DEFAULT_PORT) -> None:
+    """Upsert every polygon version in the geojson into the terminals table."""
+    cfg = load_port(port)
+    terminals = read_terminals_geojson(terminals_path(cfg))
+    with connect(Settings()) as conn:
+        written = upsert_terminals(conn, cfg, terminals)
+        conn.commit()
+    versions = sorted({t.version for t in terminals})
+    typer.echo(f"upserted {written} terminals at versions {versions}")
+
+
+@port_app.command("check")
+def port_check(port: PortOption = DEFAULT_PORT) -> None:
+    """Report every problem in the port's geometry. Exits 1 when there is one."""
+    cfg = load_port(port)
+    problems = check_port(cfg, read_terminals_geojson(terminals_path(cfg)))
+    for problem in problems:
+        typer.echo(problem)
+    if problems:
+        raise typer.Exit(code=1)
+    typer.echo("ok")

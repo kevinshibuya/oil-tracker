@@ -1,0 +1,57 @@
+# The Port of Corpus Christi: bounding box, seaward gate, terminal seeds and the
+# thresholds the berth-visit state machine runs on.
+id: corpus_christi
+name: Port of Corpus Christi
+
+bbox:
+  lat_min: 27.55
+  lat_max: 28.05
+  lon_min: -97.60
+  lon_max: -96.60
+
+# Across the Aransas Pass jetties, 2,972 m wide. The line is lat + lon = -69.21;
+# the harbour side is below it.
+seaward_gate:
+  a: [27.84, -97.05]
+  b: [27.82, -97.03]
+
+# A point in the inner-harbour ship channel. It fixes which side of the gate is
+# seaward and anchors the synthetic inland track in the detection tests.
+harbour_reference: [27.81, -97.40]
+
+terminal_seeds:
+  - terminal_id: enbridge_ingleside
+    name: Enbridge Ingleside Energy Center
+    crude: "yes"
+    centre: [27.82, -97.20]
+  - terminal_id: south_texas_gateway
+    name: South Texas Gateway
+    crude: "yes"
+    centre: [27.83, -97.21]
+  - terminal_id: flint_hills_ingleside
+    name: Flint Hills Resources Ingleside
+    crude: "uncertain"
+    centre: [27.83, -97.22]
+
+seed_radius_m: 700
+
+# Berth visit thresholds.
+dwell_min_hours: 4
+low_speed_knots: 0.5
+low_speed_fraction_min: 0.8
+gap_tolerance_hours: 3
+exit_confirm_minutes: 30
+
+# Departure scan.
+departure_window_hours: 36
+
+# Draught plateaus.
+arrival_lookback_hours: 12
+candidates_before_exit_hours: 6
+candidates_after_exit_hours: 24
+plateau_min_obs: 3
+plateau_min_span_minutes: 30
+plateau_max_range_m: 0.2
+
+terminals_file: corpus_christi.terminals.geojson
+portwatch_portid: port264
