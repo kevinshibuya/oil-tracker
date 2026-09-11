@@ -1,0 +1,83 @@
+2023:
+- url_pattern: https://noaaocm.blob.core.windows.net/ais/csv2/csv{Y}/ais-{Y}-{M}-{D}.csv.zst
+  format: csv_zst
+  header:
+  - mmsi
+  - base_date_time
+  - longitude
+  - latitude
+  - sog
+  - cog
+  - heading
+  - vessel_name
+  - imo
+  - call_sign
+  - vessel_type
+  - status
+  - length
+  - width
+  - draft
+  - cargo
+  - transceiver
+- url_pattern: https://coast.noaa.gov/htdata/CMSP/AISDataHandler/{Y}/AIS_{Y}_{M}_{D}.zip
+  format: csv_zip
+  header:
+  - MMSI
+  - BaseDateTime
+  - LAT
+  - LON
+  - SOG
+  - COG
+  - Heading
+  - VesselName
+  - IMO
+  - CallSign
+  - VesselType
+  - Status
+  - Length
+  - Width
+  - Draft
+  - Cargo
+  - TransceiverClass
+2024:
+- url_pattern: https://noaaocm.blob.core.windows.net/ais/csv2/csv{Y}/ais-{Y}-{M}-{D}.csv.zst
+  format: csv_zst
+  header:
+  - mmsi
+  - base_date_time
+  - longitude
+  - latitude
+  - sog
+  - cog
+  - heading
+  - vessel_name
+  - imo
+  - call_sign
+  - vessel_type
+  - status
+  - length
+  - width
+  - draft
+  - cargo
+  - transceiver
+2025:
+- url_pattern: https://noaaocm.blob.core.windows.net/ais/csv2/csv{Y}/ais-{Y}-{M}-{D}.csv.zst
+  format: csv_zst
+  header:
+  - mmsi
+  - base_date_time
+  - longitude
+  - latitude
+  - sog
+  - cog
+  - heading
+  - vessel_name
+  - imo
+  - call_sign
+  - vessel_type
+  - status
+  - length
+  - width
+  - draft
+  - cargo
+  - transceiver
