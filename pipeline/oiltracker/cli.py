@@ -1,5 +1,6 @@
 """The `oil` command line: one Typer sub-app per stage of the pipeline."""
 
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Annotated
@@ -9,11 +10,12 @@ import typer
 
 from oiltracker.ais.backfill import backfill, backfill_day, parquet_path
 from oiltracker.ais.fixture import make_fixture
+from oiltracker.ais.load import load_day, loadable_days
 from oiltracker.ais.probe import probe_year
 from oiltracker.ais.sources import CANDIDATES, SourceSpec, load_sources, write_sources
 from oiltracker.db.connect import connect
 from oiltracker.db.migrate import migrate
-from oiltracker.paths import AIS_SOURCES, DATA_DIR, FIXTURES_DIR
+from oiltracker.paths import AIS_SOURCES, DATA_DIR, FIXTURES_DIR, VESSELS_DIR
 from oiltracker.ports.check import check_port
 from oiltracker.ports.config import (
     Terminal,
@@ -25,6 +27,8 @@ from oiltracker.ports.config import (
 )
 from oiltracker.ports.store import upsert_terminals
 from oiltracker.settings import Settings
+from oiltracker.version import code_version
+from oiltracker.vessels.build import build_vessels
 
 MIGRATIONS_DIR = Path(__file__).parent / "db" / "migrations"
 DEFAULT_YEARS = [2023, 2024, 2025]
@@ -194,3 +198,42 @@ def ais_fixture(
     out = FIXTURES_DIR / "ais" / cfg.id / f"{when.isoformat()}.parquet"
     rows = make_fixture(source, out, FIXTURE_MAX_BYTES)
     typer.echo(f"{out} holds {rows} rows in {out.stat().st_size} bytes")
+
+
+@ais_app.command("load")
+def ais_load(
+    port: PortOption = DEFAULT_PORT,
+    from_day: FromOption = SPAN_START,
+    to_day: ToOption = SPAN_END,
+    force: Annotated[bool, typer.Option("--force", help="Reload days already loaded.")] = False,
+    data_dir: Annotated[Path, typer.Option("--data-dir")] = DATA_DIR,
+) -> None:
+    """Load every fetched day's tanker positions and statics into PostGIS."""
+    cfg = load_port(port)
+    start, end = date.fromisoformat(from_day), date.fromisoformat(to_day)
+
+    with connect(Settings()) as conn:
+        days = loadable_days(conn, cfg, start, end, force)
+        if not days:
+            typer.echo("nothing to load: every fetched day in the span is already loaded")
+            return
+        total = 0
+        for index, day in enumerate(days, start=1):
+            rows = load_day(conn, cfg, day, data_dir)
+            conn.commit()
+            total += rows
+            print(f"[{index}/{len(days)}] {day} {rows} rows", file=sys.stderr, flush=True)
+    typer.echo(f"loaded {total} tanker positions across {len(days)} days")
+
+
+@vessels_app.command("build")
+def vessels_build(
+    port: PortOption = DEFAULT_PORT,
+    particulars: Annotated[Path, typer.Option("--particulars")] = VESSELS_DIR / "particulars.csv",
+) -> None:
+    """Rebuild the vessels table from the day statics and positions."""
+    cfg = load_port(port)
+    with connect(Settings()) as conn:
+        written = build_vessels(conn, particulars, code_version(), cfg.id)
+        conn.commit()
+    typer.echo(f"wrote {written} vessels")

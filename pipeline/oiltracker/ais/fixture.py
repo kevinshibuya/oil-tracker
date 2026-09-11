@@ -13,7 +13,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-from oiltracker.ais.schema import TANKER_CODE_MAX, TANKER_CODE_MIN
+from oiltracker.ais.load import tanker_mask
 
 SAMPLE_MODULI = (10, 25, 100, 0)
 """Keep one MMSI in N of the non-tankers, tightening until it fits. 0 keeps none."""
@@ -26,7 +26,7 @@ def make_fixture(parquet_path: Path, out_path: Path, max_bytes: int) -> int:
     the fixture is committed and its size is a contract rather than a preference.
     """
     table = pq.read_table(parquet_path)
-    tankers = _is_tanker(table)
+    tankers = tanker_mask(table)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     for modulus in SAMPLE_MODULI:
@@ -41,22 +41,6 @@ def make_fixture(parquet_path: Path, out_path: Path, max_bytes: int) -> int:
         f"{out_path} is {out_path.stat().st_size} bytes with tankers alone, "
         f"over the {max_bytes} limit"
     )
-
-
-def _is_tanker(table: pa.Table) -> pa.Array | pa.ChunkedArray:
-    """Either code in the tanker range. A null operand never matches, but a
-    known code on the other side still does, so the or is Kleene.
-    """
-    return pc.or_kleene(
-        _in_tanker_range(table.column("vessel_type")),
-        _in_tanker_range(table.column("cargo")),
-    )
-
-
-def _in_tanker_range(column: pa.ChunkedArray) -> pa.Array | pa.ChunkedArray:
-    low = pa.scalar(TANKER_CODE_MIN, type=pa.int16())
-    high = pa.scalar(TANKER_CODE_MAX, type=pa.int16())
-    return pc.and_(pc.greater_equal(column, low), pc.less_equal(column, high))
 
 
 def _every_nth_mmsi(table: pa.Table, modulus: int) -> pa.Array | pa.ChunkedArray:
