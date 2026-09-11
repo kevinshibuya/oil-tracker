@@ -55,3 +55,6 @@ plateau_max_range_m: 0.2
 
 terminals_file: corpus_christi.terminals.geojson
 portwatch_portid: port264
+# What PortWatch calls this port, for the --confirm check. Not the port's own
+# name: PortWatch lists it as plain "Corpus Christi".
+portwatch_name_prefix: Corpus

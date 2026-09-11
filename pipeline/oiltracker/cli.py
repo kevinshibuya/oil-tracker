@@ -28,6 +28,7 @@ from oiltracker.ports.config import (
 )
 from oiltracker.ports.store import upsert_terminals
 from oiltracker.settings import Settings
+from oiltracker.truth.portwatch import confirm_portid, fetch_portwatch, upsert_portwatch
 from oiltracker.version import code_version
 from oiltracker.vessels.build import build_vessels
 
@@ -248,3 +249,32 @@ def events_detect(port: PortOption = DEFAULT_PORT) -> None:
         visits, events = detect_port(conn, cfg, code_version())
         conn.commit()
     typer.echo(f"{visits} berth visits, {events} export events")
+
+
+@truth_app.command("portwatch")
+def truth_portwatch(
+    port: PortOption = DEFAULT_PORT,
+    confirm: Annotated[
+        bool, typer.Option("--confirm", help="Check the port id before fetching anything.")
+    ] = False,
+) -> None:
+    """Fill portwatch_daily from the IMF PortWatch daily series."""
+    cfg = load_port(port)
+    with httpx.Client(timeout=PROBE_TIMEOUT_S) as client:
+        if confirm:
+            pairs = confirm_portid(client, cfg.portwatch_name_prefix)
+            for portid, portname in pairs:
+                typer.echo(f"{portid} {portname}")
+            if [portid for portid, _ in pairs] != [cfg.portwatch_portid]:
+                typer.echo(f"blocked: portwatch portids {[p for p, _ in pairs]}")
+                raise typer.Exit(code=1)
+            typer.echo(f"ok: {cfg.portwatch_portid} is the only match")
+            return
+
+        rows = fetch_portwatch(client, cfg.portwatch_portid, date.fromisoformat(SPAN_START))
+
+    with connect(Settings()) as conn:
+        written = upsert_portwatch(conn, rows)
+        conn.commit()
+    span = f"{rows[0].date} to {rows[-1].date}" if rows else "nothing"
+    typer.echo(f"upserted {written} PortWatch days, {span}")

@@ -74,6 +74,7 @@ class PortConfig(BaseModel):
 
     terminals_file: str
     portwatch_portid: str = "port264"
+    portwatch_name_prefix: str = "Corpus"
 
 
 @dataclass(frozen=True)
