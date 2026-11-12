@@ -4,7 +4,7 @@ A Python pipeline that turns NOAA ship-position data into a record of crude tank
 Port of Corpus Christi, Texas, as the first step toward a weekly estimate of the port's crude
 exports.
 
-**Status: work in progress.** This is the earliest project of the set: only milestone 1, ingest, is
+**Status: work in progress.** This is an early-stage project: only milestone 1, ingest, is
 built, with its code and 90 tests committed. The full-data runs from the positions load onward have
 not happened yet, and the export estimate, the satellite signals and the globe exist only as design.
 
